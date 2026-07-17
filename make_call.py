@@ -10,6 +10,8 @@ import random
 import json
 import logging
 from dotenv import load_dotenv
+# 1️⃣ Imported ExcelService below dotenv
+from excel_service import ExcelService
 from livekit import api
 
 # Load environment variables
@@ -30,6 +32,12 @@ async def main():
         print(f"Error: Phone number '{phone_number}' looks too short.")
         return
 
+    # 2️⃣ Excel data validation for customer existence
+    customer = ExcelService.find_customer(phone_number)
+    if customer is None:
+        print(f"\n❌ Customer not found in customers.xlsx : {phone_number}")
+        return
+
     url = os.getenv("LIVEKIT_URL")
     api_key = os.getenv("LIVEKIT_API_KEY")
     api_secret = os.getenv("LIVEKIT_API_SECRET")
@@ -41,28 +49,43 @@ async def main():
     # 2. Setup API Client
     lk_api = api.LiveKitAPI(url=url, api_key=api_key, api_secret=api_secret)
 
-    # 3. Create a unique room for this call
-    # We use a random suffix to ensure room names are unique
-    room_name = f"call-{phone_number.replace('+', '')}-{random.randint(1000, 9999)}"
+    # 🌟 CRITICAL FIX: call_id pehle generate hoga taaki customer_data me add ho sake
+    call_id = random.randint(100000, 999999)
+    room_name = f"sfl-call-{call_id}"
 
-    print(f"Initating call to {phone_number}...")
-    print(f"Session Room: {room_name}")
+    # 3️⃣ Replaced hardcoded customer_data dict with the Excel data dynamic copy
+    customer_data = customer.copy()
+    customer_data["call_id"] = call_id  # Ab call_id crash nahi karega!
+    customer_data["voice_id"] = "anushka"
+    customer_data["model_provider"] = "groq"
+
+    # 4️⃣ Branded Prints updated to use customer.get() safely
+    print("=" * 60)
+    print("SUNITA FINLEASE AI CALL")
+    print("=" * 60)
+    print(f"Call ID       : {call_id}")
+    print(f"Customer      : {customer.get('customer_name')}")
+    print(f"Phone         : {phone_number}")
+    print(f"Loan Type     : {customer.get('loan_type')}")
+    print(f"Campaign      : {customer.get('campaign')}")
+    print(f"Room          : {room_name}")
+    print("=" * 60)
+
+    print(f"Initiating call to {phone_number}...")
 
     try:
-        # 4. Dispatch the Agent
-        # We explicitly tell LiveKit to send the 'outbound-caller' agent to this room.
-        # We pass the phone number in the 'metadata' field so the agent knows who to dial.
+        # 4. Dispatch the Agent with the dynamic customer data payload
         dispatch_request = api.CreateAgentDispatchRequest(
             agent_name="outbound-caller", # Must match agent.py
             room=room_name,
-            metadata=json.dumps({"phone_number": phone_number})
+            metadata=json.dumps(customer_data)
         )
         
         dispatch = await lk_api.agent_dispatch.create_dispatch(dispatch_request)
 
         print("\n✅ Call Dispatched Successfully!")
         print(f"Dispatch ID: {dispatch.id}")
-        print("-" * 40)
+        print("-" * 60)
         print("The agent is now joining the room and will dial the number.")
         print("Check your agent terminal for logs.")
         
